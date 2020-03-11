@@ -26,5 +26,14 @@ new Vue({
   components: {
     App
   },
-  store
+  store,
+  render(createElement){
+    return createElement(
+      'div',
+      { attrs: {id:'app'} },
+      [
+        createElement('app')
+      ]
+    );
+  }
 });
