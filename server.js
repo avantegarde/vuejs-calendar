@@ -18,16 +18,36 @@ let events = [
   { description: 'event4', date: moment('2020-03-02', 'YYYY-MM-DD')},
 ];
 
+let renderer;
+
+if (process.env.NODE_ENV === 'production') {
+  let bundle = fs.readFileSync('./dist/node.bundle.js', 'utf8');
+  renderer = require('vue-server-renderer').createBundleRenderer(bundle);
+  app.use('/dist', express.static(path.join(__dirname, 'dist')));
+}
+
 app.get('/', (req, res) => {
   let template = fs.readFileSync(path.resolve('./index.html'), 'utf-8');
   let contentMarker = '<!--APP-->';
-  res.send(template.replace(contentMarker, `<script>var __INITIAL_STATE__ = ${ serialize(events) }</script>`));
-
+  if(renderer) {
+    renderer.renderToString({ events }, (error,html) => {
+      if(error) {
+        console.log(error);
+      } else {
+        res.send(template.replace(contentMarker, `<script>var __INITIAL_STATE__ = ${ serialize(events) }</script>\n${html}`));
+      }
+    });
+  } else {
+    res.send('<p>Awaiting compilation...</p><script src="/reload/reload.js"></script>');
+  }
 });
 
 app.use(require('body-parser').json());
 app.post('/add_event', (req, res) => {
-  events.push(req.body);
+  events.push({
+    description: req.body.description,
+    date: moment(req.body.date)
+  });
   res.sendStatus(200);
 });
 
@@ -37,6 +57,13 @@ if (process.env.NODE_ENV === 'development') {
   const reload = require('reload');
   const reloadServer = reload(app);
   require('./webpack-dev-middleware').init(app);
+  require('./webpack-server-compiler').init(function(bundle){
+    let needsReload = (renderer === undefined);
+    renderer = require('vue-server-renderer').createBundleRenderer(bundle);
+    if(needsReload){
+      reloadServer.reload();
+    }
+  });
 }
 
 server.listen(process.env.PORT, function () {
